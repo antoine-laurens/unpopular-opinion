@@ -89,13 +89,19 @@ import { translateText } from './translate';
 
 export const getRandomGameMovie = async (): Promise<{ movie: Movie; reviews: string[] } | null> => {
     let attempts = 0;
-    // Try up to 20 times (batches) to find a suitable movie
-    while (attempts < 20) {
+    // Try up to 60 times (batches) to find a suitable movie
+    while (attempts < 60) {
         attempts++;
-        // Increase diversity: Pages 1 to 100
-        const page = Math.floor(Math.random() * 100) + 1;
+        // Increase diversity: Pages 1 to 500 (approx 10,000 top movies)
+        // Use /discover/movie to get a wider range than /movie/popular (which is often limited)
+        const page = Math.floor(Math.random() * 500) + 1;
         try {
-            const data = await fetchTMDB('/movie/popular', { page });
+            const data = await fetchTMDB('/discover/movie', {
+                page,
+                sort_by: 'popularity.desc',
+                'vote_count.gte': 100, // Ensure decent volume of votes
+                include_adult: false
+            });
             const movies = data.results;
 
             if (!movies || movies.length === 0) continue;
@@ -110,11 +116,15 @@ export const getRandomGameMovie = async (): Promise<{ movie: Movie; reviews: str
                 // Fetch reviews for the batch in parallel
                 const batchResults = await Promise.all(batch.map(async (movie: Movie) => {
                     const reviews = await getMovieReviews(movie.id);
-                    // Filter: Strict bad reviews (rating <= 3) and must have content
-                    const validReviews = reviews.filter(r =>
-                        r.content.length > 50 &&
-                        r.rating !== undefined && r.rating <= 3
-                    );
+                    // Filter: Strict bad reviews (rating <= 2) to approximate 1 star
+                    const validReviews = reviews.filter(r => {
+                        // Filter: 1 or 2 stars (rating <= 4 on 1-10 scale)
+                        // MUST check typeof to avoid null coercing to 0
+                        const strictRating = typeof r.rating === 'number' && r.rating <= 4;
+                        const hasContent = r.content.length > 50;
+
+                        return strictRating && hasContent;
+                    });
 
                     if (validReviews.length >= 5) {
                         return { movie, validReviews };

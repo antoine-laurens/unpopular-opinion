@@ -15,10 +15,13 @@ export default function GameContainer() {
     const [guesses, setGuesses] = useState<GuessResult[]>([]);
     const [gameStatus, setGameStatus] = useState<'idle' | 'playing' | 'won' | 'lost'>('idle');
     const [targetMovie, setTargetMovie] = useState<Movie | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     const startGame = async () => {
         setLoading(true);
+        setError(null);
         setGuesses([]);
+        setReviews([]); // Clear old reviews immediately to prevent flickering
         setGameStatus('playing');
         setTargetMovie(null);
         try {
@@ -30,10 +33,12 @@ export default function GameContainer() {
             } else {
                 console.error("Failed to start game");
                 setGameStatus('idle');
+                setError("Could not find a movie with 1-star reviews. Please try again.");
             }
         } catch (e) {
             console.error(e);
             setGameStatus('idle');
+            setError("Connection failed. Please try again.");
         } finally {
             setLoading(false);
         }
@@ -41,9 +46,6 @@ export default function GameContainer() {
 
     const handleGuess = async (movie: Movie) => {
         if (!token) return;
-
-        // Optimistic checking? No, we need server validation.
-        // Add temporary loading state if needed, but we'll just wait.
 
         // Check duplicate
         if (guesses.some(g => g.movieTitle === movie.title)) return;
@@ -72,12 +74,6 @@ export default function GameContainer() {
 
                 if (newGuesses.length >= 5) {
                     setGameStatus('lost');
-                    // If lost, we should have received the target movie in the real app logic?
-                    // Wait, I didn't send targetMovie on loss in my API route. I should fix that or fetch it?
-                    // I'll fix the API route logic via a patch or just fetch it here if I had the ID? 
-                    // I don't have the ID. The API *must* return it on loss.
-                    // I'll update the API route logic in a moment.
-                    // For now assuming the API will be updated to return `targetMovie` on loss or valid result.
                     if (data.targetMovie) {
                         setTargetMovie(data.targetMovie);
                     }
@@ -88,6 +84,24 @@ export default function GameContainer() {
         }
     };
 
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+                <div className="w-24 h-24 bg-red-500/20 rounded-2xl flex items-center justify-center mb-8">
+                    <Clapperboard className="w-12 h-12 text-red-500" />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-4">Error</h2>
+                <p className="text-lg text-slate-400 mb-8">{error}</p>
+                <button
+                    onClick={startGame}
+                    className="bg-white text-black px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform"
+                >
+                    Try Again
+                </button>
+            </div>
+        );
+    }
+
     if (gameStatus === 'idle') {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
@@ -95,10 +109,10 @@ export default function GameContainer() {
                     <Clapperboard className="w-12 h-12 text-black" />
                 </div>
                 <h1 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 mb-6 tracking-tight">
-                    Bad Movie Guess
+                    Unpopular Opinion
                 </h1>
                 <p className="text-lg text-slate-400 max-w-md mb-10 leading-relaxed">
-                    Can you identify the movie based solely on its worst reviews? You have 5 attempts.
+                    Can you guess the movie based on its worst reviews?
                 </p>
                 <button
                     onClick={startGame}
@@ -111,6 +125,15 @@ export default function GameContainer() {
         );
     }
 
+    if (loading && reviews.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <Loader2 className="w-12 h-12 text-amber-500 animate-spin mb-4" />
+                <p className="text-slate-400">Looking for bad reviews...</p>
+            </div>
+        );
+    }
+
     return (
         <div className="w-full max-w-4xl mx-auto px-4 py-8 pb-32">
             {/* Header */}
@@ -119,7 +142,7 @@ export default function GameContainer() {
                     <div className="w-8 h-8 bg-amber-500 rounded flex items-center justify-center">
                         <Clapperboard className="w-5 h-5 text-black" />
                     </div>
-                    Bad Movie Guess
+                    Unpopular Opinion
                 </div>
                 <div className="text-sm font-mono bg-slate-900 px-3 py-1 rounded text-slate-400">
                     Attempt {guesses.length + 1}/5
